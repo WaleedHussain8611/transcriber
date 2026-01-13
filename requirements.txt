@@ -3,3 +3,4 @@ faster-whisper
 pandas
 openpyxl
 pyinstaller
+ffmpeg-python

@@ -2,11 +2,11 @@ name: Build Windows EXE
 
 on:
   push:
-    branches: [ main ]  # Runs whenever you push to the main branch
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: windows-latest  # This spins up a real Windows machine!
+    runs-on: windows-latest
 
     steps:
     - name: Checkout Code
@@ -15,18 +15,24 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'  # Stable version for Whisper/CustomTkinter
+        python-version: '3.11'
 
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    # This step downloads FFmpeg so PyInstaller can find it to bundle it
+    - name: Install FFmpeg for Bundling
+      run: |
+        choco install ffmpeg -y
+
     - name: Build with PyInstaller
       run: |
-        # --noconsole: hides the black CMD box
-        # --onefile: packs everything into a single EXE
-        pyinstaller --noconsole --onefile app.py
+        # --add-binary: Bundles ffmpeg.exe into the internal folder of the EXE
+        # We find the path of ffmpeg using 'where'
+        $ffmpegPath = (Get-Command ffmpeg.exe).Source
+        pyinstaller --noconsole --onefile --add-binary "$($ffmpegPath);." app.py
 
     - name: Upload EXE as Artifact
       uses: actions/upload-artifact@v4
