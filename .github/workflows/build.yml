@@ -29,11 +29,10 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        # --add-binary: Bundles ffmpeg.exe into the internal folder of the EXE
-        # We find the path of ffmpeg using 'where'
-        $ffmpegPath = (Get-Command ffmpeg.exe).Source
-        pyinstaller --noconsole --onefile --add-binary "$($ffmpegPath);." app.py
-
+        # --noconsole: hides the black CMD box
+        # --onefile: packs everything into a single EXE
+        pyinstaller --noconsole --onefile app.py
+        
     - name: Upload EXE as Artifact
       uses: actions/upload-artifact@v4
       with:
