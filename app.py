@@ -4,6 +4,7 @@ from threading import Thread
 import pandas as pd
 from faster_whisper import WhisperModel
 import os
+import subprocess
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
 
@@ -13,15 +14,18 @@ class TranscriberApp(ctk.CTk):
         self.title("AI Video Transcriber Pro")
         self.geometry("600x550")
 
+        # Control Variables
         self.is_running = False
         self.cancel_requested = False
 
-        self.label = ctk.CTkLabel(self, text="Select a video to begin", font=("Arial", 16))
+        # UI Layout
+        self.label = ctk.CTkLabel(self, text="Step 1: Select your video file", font=("Arial", 16))
         self.label.pack(pady=20)
 
         self.btn_select = ctk.CTkButton(self, text="Select Video", command=self.select_file)
         self.btn_select.pack(pady=10)
 
+        # Cancel Button (Hidden by default)
         self.btn_cancel = ctk.CTkButton(self, text="Cancel Task", fg_color="#d9534f", 
                                         hover_color="#c9302c", command=self.request_cancel)
         
@@ -35,6 +39,7 @@ class TranscriberApp(ctk.CTk):
     def select_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4 *.mkv *.mov *.avi")])
         if file_path:
+            # UI Refresh
             self.status_log.delete("1.0", "end") 
             self.progress_bar.set(0)
             self.progress_label.configure(text="Progress: 0%")
@@ -42,14 +47,16 @@ class TranscriberApp(ctk.CTk):
             self.btn_cancel.pack(pady=5)
             self.progress_bar.pack(pady=10)
             self.progress_label.pack(pady=5)
+            
             self.is_running = True
             self.cancel_requested = False
+            
             Thread(target=self.process_video, args=(file_path,), daemon=True).start()
 
     def request_cancel(self):
         if self.is_running:
             self.cancel_requested = True
-            self.log("!!! Cancellation requested. Stopping...")
+            self.log("!!! Cancellation requested. Cleaning up...")
             self.btn_cancel.configure(state="disabled", text="Stopping...")
 
     def log(self, message):
@@ -57,18 +64,34 @@ class TranscriberApp(ctk.CTk):
         self.status_log.see("end")
 
     def process_video(self, video_path):
+        audio_temp = "temp_audio.mp3"
         try:
-            self.log("Loading AI Model...")
+            # 1. STRIP AUDIO (Speed Improvement)
+            self.log("Step 1: Stripping audio (this is 100x faster than reading 5GB video)...")
+            subprocess.run([
+                'ffmpeg', '-i', video_path, 
+                '-vn', '-ar', '16000', '-ac', '1', 
+                '-ab', '128k', '-f', 'mp3', '-y', audio_temp
+            ], check=True, capture_output=True)
+
+            if self.cancel_requested: return
+
+            # 2. LOAD MODEL
+            self.log("Step 2: Loading AI Model...")
             model = WhisperModel("base", device="cpu", compute_type="int8")
-            self.log(f"Transcribing: {os.path.basename(video_path)}")
-            segments, info = model.transcribe(video_path, beam_size=5)
+            
+            # 3. TRANSCRIBE
+            self.log("Step 3: Transcribing audio...")
+            segments, info = model.transcribe(audio_temp, beam_size=5)
             
             total_duration = info.duration
             transcript_data = []
+            
             for segment in segments:
                 if self.cancel_requested:
-                    self.log("Task cancelled.")
+                    self.log("Task stopped by user.")
                     return
+
                 transcript_data.append(segment)
                 progress = min(segment.end / total_duration, 0.99)
                 self.progress_bar.set(progress)
@@ -77,14 +100,18 @@ class TranscriberApp(ctk.CTk):
             self.progress_bar.set(1.0)
             self.progress_label.configure(text="Progress: 100%")
             
-            self.log("Writing to your exact Template structure...")
+            # 4. SAVE TO TEMPLATE
+            self.log("Step 4: Mapping to script template structure...")
             output_file = video_path.rsplit(".", 1)[0] + "_script.xlsx"
             self.save_to_template(video_path, transcript_data, total_duration, output_file)
-            self.log(f"Success! Saved to: {output_file}")
+            
+            self.log(f"Success! Script saved at: {output_file}")
             
         except Exception as e:
             self.log(f"Error: {str(e)}")
         finally:
+            if os.path.exists(audio_temp):
+                os.remove(audio_temp)
             self.is_running = False
             self.btn_select.configure(state="normal")
             self.btn_cancel.pack_forget()
@@ -94,49 +121,37 @@ class TranscriberApp(ctk.CTk):
         video_name = os.path.basename(video_path)
         fmt = lambda s: f"{int(s//3600):02}:{int((s%3600)//60):02}:{int(s%60):02}"
         
-        # Define the structure based on your provided file
-        headers = [
-            "Video", "Background music", "Theme", "Guest", "Start time", 
-            "End time", "Time length", "audio", "start time", "end time", 
-            "Phrase", "Angle", "Comment", "Additional comment"
-        ]
-        
+        # Structure matching your CSV/Excel sample:
+        # A=Video, E=Start, F=End, K=Phrase
         rows = []
         for start in range(0, int(total_time), 5):
             end = min(start + 5, int(total_time))
             text = " ".join([s.text for s in segments if s.start >= start and s.start < end]).strip()
             
-            # Creating a row that matches the column index of the template
             row = [
-                video_name, # A: Video
-                "",         # B: Background music
-                "",         # C: Theme
-                "",         # D: Guest
-                fmt(start), # E: Start time
-                fmt(end),   # F: End time
-                "00:00:05", # G: Time length
-                "",         # H: audio
-                "",         # I: start time
-                "",         # J: end time
-                text,       # K: Phrase (Transcription)
-                "",         # L: Angle
-                "",         # M: Comment
-                ""          # N: Additional comment
+                video_name, # Col A
+                "", "", "", # Col B, C, D
+                fmt(start), # Col E
+                fmt(end),   # Col F
+                "00:00:05", # Col G
+                "", "", "", # Col H, I, J
+                text,       # Col K (Phrase)
+                "", "", ""  # Col L, M, N
             ]
             rows.append(row)
 
-        # Write to Excel
-        df = pd.DataFrame(rows, columns=headers)
-        df.to_excel(output_path, index=False, startrow=3) # Data starts after instructions
+        # Write data starting from Row 4 to leave room for instruction headers
+        df = pd.DataFrame(rows)
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, header=False, startrow=3)
 
-        # Formatting
+        # Professional Alignment & Column Widths
         wb = load_workbook(output_path)
         ws = wb.active
-        
-        # Re-insert the template instruction headers if needed manually or just style:
-        column_widths = {'A': 25, 'E': 12, 'F': 12, 'K': 60}
-        for col, width in column_widths.items():
-            ws.column_dimensions[col].width = width
+        ws.column_dimensions['A'].width = 25
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 12
+        ws.column_dimensions['K'].width = 80 # Expand for text readability
 
         for row in ws.iter_rows(min_row=4):
             for cell in row:
