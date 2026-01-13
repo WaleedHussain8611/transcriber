@@ -1,51 +1,98 @@
-import streamlit as st
-import whisper
+import customtkinter as ctk
+from tkinter import filedialog
+from threading import Thread
 import pandas as pd
-from moviepy import VideoFileClip # New way (v2.0+)
+from faster_whisper import WhisperModel
 import os
+import math
 
-st.title("Local Video-to-Excel Transcriber")
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
-# 1. File Uploader
-uploaded_file = st.file_uploader("Upload Video (up to 5GB)", type=["mp4", "mkv", "mov"])
+class TranscriberApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("AI Video Transcriber (5GB Support)")
+        self.geometry("600x450")
 
-if uploaded_file:
-    # Save the uploaded file locally to avoid keeping 5GB in RAM
-    with open("temp_video.mp4", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    st.success("Video uploaded! Extracting audio...")
+        # UI Layout
+        self.label = ctk.CTkLabel(self, text="Step 1: Select your video file", font=("Arial", 16))
+        self.label.pack(pady=30)
 
-    # 2. Extract Audio
-    video = VideoFileClip("temp_video.mp4")
-    video.audio.write_audiofile("temp_audio.mp3")
-    duration = int(video.duration)
-    video.close()
+        self.btn_select = ctk.CTkButton(self, text="Select Video", command=self.select_file)
+        self.btn_select.pack(pady=10)
 
-    # 3. Transcribe
-    st.info("Transcribing... this may take a while for large files.")
-    model = whisper.load_model("base") # Use 'large' for better quality if you have a GPU
-    result = model.transcribe("temp_audio.mp3")
-
-    # 4. Process to 5-second intervalsx
-    rows = []
-    for start in range(0, duration, 5):
-        end = min(start + 5, duration)
+        self.progress_label = ctk.CTkLabel(self, text="Progress: 0%")
+        self.progress_bar = ctk.CTkProgressBar(self, width=400)
+        self.progress_bar.set(0)
         
-        # Format time
+        self.status_log = ctk.CTkTextbox(self, width=500, height=150)
+        self.status_log.pack(pady=20)
+
+    def select_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4 *.mkv *.mov *.avi")])
+        if file_path:
+            self.btn_select.configure(state="disabled")
+            self.progress_bar.pack(pady=10)
+            self.progress_label.pack(pady=5)
+            # Start transcription in a background thread
+            Thread(target=self.process_video, args=(file_path,), daemon=True).start()
+
+    def log(self, message):
+        self.status_log.insert("end", message + "\n")
+        self.status_log.see("end")
+
+    def process_video(self, video_path):
+        try:
+            self.log(f"Loading AI Model...")
+            # 'int8' is best for local CPU; use 'float16' if you have a GPU
+            model = WhisperModel("base", device="cpu", compute_type="int8")
+            
+            self.log(f"Processing: {os.path.basename(video_path)}")
+            segments, info = model.transcribe(video_path, beam_size=5)
+            
+            total_duration = info.duration
+            video_name = os.path.basename(video_path)
+            
+            # Transcription results storage
+            transcript_data = []
+            
+            # Iterate through segments and update progress
+            for segment in segments:
+                transcript_data.append(segment)
+                # Update progress bar based on current segment timestamp
+                progress = min(segment.end / total_duration, 1.0)
+                self.progress_bar.set(progress)
+                self.progress_label.configure(text=f"Progress: {int(progress * 100)}%")
+
+            self.log("Aligning text to 5-second intervals...")
+            final_rows = self.map_to_intervals(video_name, transcript_data, total_duration)
+            
+            # Export to Excel
+            df = pd.DataFrame(final_rows, columns=['video name', 'start time (hh:mm:ss)', 'end time (hh:mm:ss)', 'transcription'])
+            output_file = video_path.rsplit(".", 1)[0] + "_transcription.xlsx"
+            df.to_excel(output_file, index=False)
+            
+            self.log(f"Success! Saved to: {output_file}")
+            self.label.configure(text="Transcription Complete!")
+            
+        except Exception as e:
+            self.log(f"Error: {str(e)}")
+        finally:
+            self.btn_select.configure(state="normal")
+
+    def map_to_intervals(self, name, segments, total_time):
+        rows = []
         fmt = lambda s: f"{int(s//3600):02}:{int((s%3600)//60):02}:{int(s%60):02}"
         
-        # Get text for this window
-        text = " ".join([s['text'] for s in result['segments'] if s['start'] >= start and s['start'] < end])
-        rows.append([uploaded_file.name, fmt(start), fmt(end), text.strip()])
+        for start in range(0, int(total_time), 5):
+            end = min(start + 5, int(total_time))
+            # Find all text that overlaps with this 5s window
+            text_bits = [s.text for s in segments if s.start >= start and s.start < end]
+            combined_text = " ".join(text_bits).strip()
+            rows.append([name, fmt(start), fmt(end), combined_text])
+        return rows
 
-    # 5. Export
-    df = pd.DataFrame(rows, columns=['video name', 'start time', 'end time', 'transcription'])
-    df.to_excel("output.xlsx", index=False)
-
-    with open("output.xlsx", "rb") as file:
-        st.download_button("Download Excel Template", data=file, file_name="transcription.xlsx")
-    
-    # Cleanup local files
-    os.remove("temp_video.mp4")
-    os.remove("temp_audio.mp3")
+if __name__ == "__main__":
+    app = TranscriberApp()
+    app.mainloop()
