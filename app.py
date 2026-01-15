@@ -74,7 +74,7 @@ class TranscriberApp(ctk.CTk):
         try:
             self.log("Loading AI Model...")
             # Optimized for speed on CPU
-            model = WhisperModel("tiny", device="cpu", compute_type="int8", cpu_threads=4)
+            model = WhisperModel("base", device="cpu", compute_type="int8", cpu_threads=4)
             
             self.log(f"Transcribing: {os.path.basename(video_path)}")
             segments, info = model.transcribe(video_path, beam_size=1)
