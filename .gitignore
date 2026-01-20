@@ -19,7 +19,6 @@ dist/
 *.manifest
 
 # Project Specific
-ffmpeg.exe
 models/
 temp_audio.wav
 *_script.xlsx
