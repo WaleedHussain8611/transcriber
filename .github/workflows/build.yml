@@ -31,7 +31,9 @@ jobs:
       run: |
         # --noconsole: hides the black CMD box
         # --onefile: packs everything into a single EXE
-        pyinstaller --noconsole --onefile app.py
+        # --add-binary: bundles ffmpeg.exe
+        # --collect-all: bundles faster_whisper and dependencies
+        pyinstaller --noconsole --onefile --add-binary "ffmpeg.exe;." --collect-all faster_whisper app.py
         
     - name: Upload EXE as Artifact
       uses: actions/upload-artifact@v4

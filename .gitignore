@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+.venv/
+.env
+
+# Distribution / Build
+build/
+dist/
+*.spec
+*.egg-info/
+
+# PyInstaller
+*.manifest
+
+# Project Specific
+ffmpeg.exe
+models/
+temp_audio.wav
+*_script.xlsx
+*.log
+
+# IDEs
+.vscode/
+.idea/

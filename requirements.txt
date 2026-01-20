@@ -4,3 +4,4 @@ pandas
 openpyxl
 pyinstaller
 ffmpeg-python
+pydub
