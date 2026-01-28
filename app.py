@@ -52,6 +52,17 @@ class TranscriberApp(ctk.CTk):
         self.header = ctk.CTkLabel(self, text="Wazza Studios - AI Video Transcriber Pro", font=("Arial", 24, "bold"), text_color="#ffffff")
         self.header.pack(pady=20)
 
+        # Model Selection
+        self.model_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.model_frame.pack(pady=5)
+        
+        self.model_label = ctk.CTkLabel(self.model_frame, text="Select Model:", font=("Arial", 14), text_color="#d1d1d1")
+        self.model_label.pack(side="left", padx=10)
+        
+        self.model_var = ctk.StringVar(value="small")
+        self.model_select = ctk.CTkComboBox(self.model_frame, values=["tiny", "base", "small", "medium", "large-v3"], variable=self.model_var, state="readonly", width=150)
+        self.model_select.pack(side="left")
+
         # Select Video Button
         self.btn_select = ctk.CTkButton(self, text="Select a Video", command=self.select_file, fg_color="#1f6aa5", hover_color="#144e78", text_color="#ffffff")
         self.btn_select.pack(pady=10)
@@ -91,6 +102,7 @@ class TranscriberApp(ctk.CTk):
             self.progress_label.configure(text="Progress: 0%")
             
             self.btn_select.configure(state="disabled")
+            self.model_select.configure(state="disabled") # Disable model selection while running
             self.btn_cancel.pack(pady=5)
             self.progress_bar.pack(pady=10)
             self.progress_label.pack(pady=5)
@@ -101,8 +113,9 @@ class TranscriberApp(ctk.CTk):
 
     def process_video(self, video_path):
         try:
-            self.log("Loading AI Model...")
-            model = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=4)
+            selected_model = self.model_var.get()
+            self.log(f"Loading AI Model ({selected_model})...")
+            model = WhisperModel(selected_model, device="cpu", compute_type="int8", cpu_threads=4)
             
             self.log("Converting video audio for processing...")
             
@@ -252,6 +265,8 @@ class TranscriberApp(ctk.CTk):
         finally:
             self.is_running = False
             self.btn_select.configure(state="normal")
+            if hasattr(self, 'model_select'):
+                self.model_select.configure(state="readonly")
             self.btn_cancel.pack_forget()
             self.btn_cancel.configure(state="normal", text="Cancel Task")
 
