@@ -22,18 +22,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    # This step downloads FFmpeg so PyInstaller can find it to bundle it
-    - name: Install FFmpeg for Bundling
-      run: |
-        choco install ffmpeg -y
+    # FFmpeg is bundled from the project root (ffmpeg.exe), so no external install needed
 
     - name: Build with PyInstaller
       run: |
-        # --noconsole: hides the black CMD box
-        # --onefile: packs everything into a single EXE
-        # --add-binary: bundles ffmpeg.exe
-        # --collect-all: bundles faster_whisper and dependencies
-        pyinstaller --noconsole --onefile --add-binary "ffmpeg.exe;." --collect-all faster_whisper app.py
+        # Use the spec file for consistent builds
+        pyinstaller app.spec
         
     - name: Upload EXE as Artifact
       uses: actions/upload-artifact@v4

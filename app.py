@@ -6,6 +6,8 @@ from faster_whisper import WhisperModel
 import os
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
+import tempfile
+import uuid
 
 import sys
 
@@ -104,8 +106,8 @@ class TranscriberApp(ctk.CTk):
             
             self.log("Converting video audio for processing...")
             
-            # Use a temp wav file
-            temp_wav = "temp_audio.wav"
+            # Use a temp wav file in the system temp directory
+            temp_wav = os.path.join(tempfile.gettempdir(), f"temp_audio_{uuid.uuid4().hex}.wav")
             
             # Check for local ffmpeg
             ffmpeg_exe = self.ffmpeg_path
@@ -132,6 +134,11 @@ class TranscriberApp(ctk.CTk):
                 subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, startupinfo=startupinfo)
             except Exception as e:
                 self.log(f"Error converting audio: {e}")
+                if hasattr(e, 'stderr') and e.stderr:
+                    try:
+                        self.log(f"FFmpeg Error Details: {e.stderr.decode('utf-8', errors='ignore')}")
+                    except:
+                        pass
                 self.log("Check if ffmpeg is installed/accessible.")
                 return
 
