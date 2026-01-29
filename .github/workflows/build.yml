@@ -34,3 +34,4 @@ jobs:
       with:
         name: Windows-Transcriber
         path: dist/app.exe
+        retention-days: 1
