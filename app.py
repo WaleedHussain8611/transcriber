@@ -274,7 +274,10 @@ class TranscriberApp(ctk.CTk):
 
         for row in ws.iter_rows(min_row=4):
             for cell in row:
-                cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+                if cell.column == 11:  # Column K is the 11th column
+                    cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='left')
+                else:
+                    cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
         
         wb.save(output_path)
 
