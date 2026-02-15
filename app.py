@@ -52,6 +52,15 @@ class TranscriberApp(ctk.CTk):
         self.header = ctk.CTkLabel(self, text="Wazza Studios - AI Video Transcriber Pro", font=("Arial", 24, "bold"), text_color="#ffffff")
         self.header.pack(pady=20)
 
+        # Language Selection
+        self.language_label = ctk.CTkLabel(self, text="Select Language:", font=("Arial", 12), text_color="#d1d1d1")
+        self.language_label.pack(pady=(10, 0))
+        
+        self.language_var = ctk.StringVar(value="English")
+        self.languages = ["English", "Arabic", "French", "Spanish", "German", "Auto Detect"]
+        self.language_menu = ctk.CTkOptionMenu(self, values=self.languages, variable=self.language_var, fg_color="#1f6aa5", button_color="#144e78", text_color="#ffffff")
+        self.language_menu.pack(pady=5)
+
         # Select Video Button
         self.btn_select = ctk.CTkButton(self, text="Select a Video", command=self.select_file, fg_color="#1f6aa5", hover_color="#144e78", text_color="#ffffff")
         self.btn_select.pack(pady=10)
@@ -90,6 +99,7 @@ class TranscriberApp(ctk.CTk):
             self.progress_bar.set(0)
             self.progress_label.configure(text="Progress: 0%")
             
+            self.language_menu.configure(state="disabled") # Disable language selection while running
             self.btn_select.configure(state="disabled")
             self.btn_cancel.pack(pady=5)
             self.progress_bar.pack(pady=10)
@@ -101,7 +111,21 @@ class TranscriberApp(ctk.CTk):
 
     def process_video(self, video_path):
         try:
-            self.log("Loading AI Model...")
+            # Get selected language
+            selected_lang_name = self.language_var.get()
+            
+            # Map name to code
+            lang_map = {
+                "English": "en",
+                "Arabic": "ar",
+                "French": "fr",
+                "Spanish": "es",
+                "German": "de",
+                "Auto Detect": None
+            }
+            language_code = lang_map.get(selected_lang_name, "en") # Default to English if something is wrong
+            
+            self.log(f"Loading AI Model... (Language: {selected_lang_name})")
             model = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=4)
             
             self.log("Converting video audio for processing...")
@@ -149,7 +173,8 @@ class TranscriberApp(ctk.CTk):
                 temp_wav, 
                 beam_size=5, 
                 word_timestamps=True,  # Enable word timestamps for precise cutting
-                vad_filter=True
+                vad_filter=True,
+                language=language_code
             )
             
             total_duration = info.duration
@@ -252,6 +277,7 @@ class TranscriberApp(ctk.CTk):
         finally:
             self.is_running = False
             self.btn_select.configure(state="normal")
+            self.language_menu.configure(state="normal") # Re-enable language selection
             self.btn_cancel.pack_forget()
             self.btn_cancel.configure(state="normal", text="Cancel Task")
 
